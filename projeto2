@@ -1,7 +1,50 @@
 import pandas as pd
 dfimobi = pd.read_excel('fundosdeinvestimento.xlsx',sheet_name='imobi')
-dfvalor=dfimobi['valor'].astype(str).str.replace(',', '.').astype(float)
-print(dfvalor.head(5))
-dfregistro=dfimobi['registro'].astype(str),pd.to_datetime(dfimobi['registro']),daytime=True,
-dfex=dfimobi['ex'].astype(str),pd.to_datetime(dfimobi['ex']),daytime=True,
-dfpagamento=dfimobi['pagamento'].astype(str),pd.to_datetime(dfimobi['pagamento']),daytime=True,
+dfdfimobi['valor']=dfimobi['valor'].astype(str).str.replace(',', '.').astype(float)
+dfimobi['registro']=(dfimobi['registro'].astype(str)
+.str.replace('/', '')
+)
+dfimobi['registro']= pd.to_datetime(dfimobi['registro'],
+format='%d.%m.%Y',
+errors='coerce')
+
+dfimobi['ex']=pd.to_datetime(dfimobi['ex'],daytime=True,errors=coerce)
+dfimobi['pagamento']=pd.to_datetime(dfimobi['pagamento'],daytime=True,errors=coerce
+
+dfcripto = pd.read_excel('fundosdeinvestimento.xlsx',sheet_name='cripto')
+dfcripto['mesano']=(dfcripto['mesano'].astype(str)
+.str.replace('de','',case=False)
+)
+
+dfcripto["numoperacao"]=(dfimobi["numoperacao"].astype(str)
+.str.replace('.', ',')
+.str.replace(',', '.')
+.astype(float)
+)
+
+dfcripto['numtotaloperacao']=(dfcripto['numtotaloperacao'].astype(str)
+.str.replace('.', ',')
+.str.replace(',', '.')
+.astype(float)
+)
+
+dfcripto['vmporoperacao']=(dfcripto['vmporoperacao'].astype(str)
+.str.replace('.', ',')
+.str.replace(',', '.')
+.astype(float)
+)
+
+dfvalores = pd.read_excel('fundosdeinvestimento.xlsx',sheet_name='valores')
+dfvalores['negocios']=(dfvalores['negocios'].astype(str)
+.str.replace('.', ',')
+.str.replace(',', '.')
+.astype(float)
+)
+dfvalores['ultima']=(dfvalores['ultima'].astype(str)
+.str.replace(',', '.')
+.astype(float)
+)
+dfvalores['variacao']=(dfvalores['variacao'].astype(str)
+.str.replace('%', '')
+.astype(float)
+)
