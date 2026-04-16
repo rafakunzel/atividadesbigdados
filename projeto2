@@ -1,0 +1,7 @@
+import pandas as pd
+dfimobi = pd.read_excel('fundosdeinvestimento.xlsx',sheet_name='imobi')
+dfvalor=dfimobi['valor'].astype(str).str.replace(',', '.').astype(float)
+print(dfvalor.head(5))
+dfregistro=dfimobi['registro'].astype(str),pd.to_datetime(dfimobi['registro']),daytime=True,
+dfex=dfimobi['ex'].astype(str),pd.to_datetime(dfimobi['ex']),daytime=True,
+dfpagamento=dfimobi['pagamento'].astype(str),pd.to_datetime(dfimobi['pagamento']),daytime=True,
