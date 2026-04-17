@@ -1,0 +1,33 @@
+Create database fundosdeinvestimento;
+use fundosdeinvestimento;
+
+create table imobi(
+idimobi int primary key not null,
+codigo varchar(255),
+tipo varchar(500),
+valor decimal(10,6),
+registro date,
+ex date,
+pagamento date
+);
+
+create table valores(
+idacoes int primary key not null,
+codigo varchar(300),
+nome varchar(600),
+negocios decimal(10,2) ,
+ultima decimal(10,2),
+variacao decimal(10,4)
+);
+
+create table cripto(
+criptoativo varchar(200),
+mesano date,
+numoperacao decimal(10,3),
+numtotaloperacao decimal(10,3),
+vmporoperacao decimal(10,2)
+);
+
+alter table valores
+add constraint fk_valores_imobi
+foreign key (idacoes) references imobi(idimobi)
