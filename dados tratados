@@ -1,0 +1,32 @@
+import pandas as pd
+def limpezadata(df):
+    for linnha in df:
+        df[0]=df.astype(str)
+    return(df)
+
+dfpatriliquido=pd.read_excel('dadosnag.xlsx.',sheet_name='patriliquido')
+dfreceber=pd.read_excel('dadosnag.xlsx.',sheet_name='valoresareceber')
+dfcaixa=pd.read_excel('dadosnag.xlsx.',sheet_name='caixa')
+dfpagar=pd.read_excel('dadosnag.xlsx.',sheet_name='valorespagar')
+
+dfliquido=dfpatriliquido['mesano']
+dfreceber=dfreceber['mesano']
+dfcaixa=dfcaixa['mesano']
+dfvalorpagar=dfpagar['mesano']
+
+limpezadata(dfliquido)
+limpezadata(dfreceber)
+limpezadata(dfcaixa)
+limpezadata(dfvalorpagar)
+#transforma arquivo em CSV
+dfpatriliquido.to_csv('PATRILIQUIDO',sep=',',encoding='UTF-8')
+
+# fundos de investimento em CSV
+dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
+dfimobi.to_csv('imobi',sep=',',encoding='UTF-8')
+
+dfvalores=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='valores')
+dfvalores.to_csv('valores',sep=',',encoding='UTF-8')
+
+dfcripto=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='cripto')
+dfcripto.to_csv('cripto',sep=',',encoding='UTF-8')
