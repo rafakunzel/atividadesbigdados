@@ -1,0 +1,74 @@
+import math
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+#analise estatística IMOBI
+# dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
+# ta=dfimobi['valor']
+
+def estatistica(x):
+    media=x.mean()
+    mediana=x.median()
+    variancia=np.var(x, ddof=0)
+    desvio_padrao=np.std(x, ddof=0)
+    cv= (desvio_padrao / media) * 100
+    distancia= variancia / (media ** 2)
+    if distancia <= 0.10:
+        analise= "Baixa dispersão dos dados em relação à média."
+    elif distancia < 0.25:
+        analise = "Dispersão moderada dos dados em relação à média."
+    else:
+        analise = "Alta dispersão dos dados em relação à média."
+    print(f"Conclusão da Dispersão: {analise}")
+    assimetria=x.skew()
+    if assimetria >= -0.5 and assimetria <= 0.5:
+        assimetria = "Simétrica (ou Quase Simétrica). Média e Mediana são próximas."
+    elif assimetria > 0.5:
+        assimetria = "Positiva. A cauda se estende para a direita (valores maiores). Média > Mediana."
+    else:
+        assimetria = "Negativa. A cauda se estende para a esquerda (valores menores). Média < Mediana."
+    print(f"\nConclusão da Assimetria: {assimetria}")
+    curtosa=x.kurtosis()
+    if curtosa >= 2.5 and curtosa <= 3.5:
+        curtosa = "Mesocúrtica. Distribuição próxima da normal (dados uniformes no entorno da média)."
+    elif curtosa < 2.5:
+        curtosa = "Platicúrtica. Dados mais dispersos em relação à média. Caudas finas e Outliers comuns."
+    else: # curtosa_real > 3.5
+        curtosa = "Leptocúrtica. Dados extremamente concentrados no centro e caudas pesadas. Outliers muito comuns." 
+        # gráfico de bloxspot 
+    print(f"\nConclusão da curtosa: {curtosa}")
+
+    print(f"--- Análise dos es Totais dos Pedidos ---")
+    print(f"\nMédia dos es Totais: R$ {media:.2f}")
+    print(f'Mediana:{mediana:.2f}')
+    print(f"Variância dos es Totais: {variancia:.2f}")
+    print(f'Assimetria:{assimetria}')
+    print(f"Desvio Padrão dos es Totais: R$ {desvio_padrao:.2f}")
+    print("-" * 100)
+    print(f"Coeficiente de Variação (CV): {cv:.2f}%")
+    print(f"Distância da Variância / Média²: {distancia:.2f}")
+    
+
+#analise estatística IMOBI
+dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
+mobi=dfimobi['valor']
+estatistica(mobi)
+
+#Análise estatística ações
+dfes=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='valores')
+nego=dfes['negocios']
+cota=dfes['ultima']
+vari=dfes['variacao']
+estatistica(nego)
+estatistica(cota)
+estatistica(vari)
+
+#Análise estatística cripto
+dfcripto=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='cripto')
+operacao=dfcripto['numoperacao']
+totalope=dfcripto['numtotaloperacao']
+vmopera=dfcripto['vmporoperacao']
+estatistica(operacao)
+estatistica(totalope)
+estatistica(vmopera)
