@@ -32,32 +32,56 @@ alter table valores
 add constraint fk_valores_imobi
 foreign key (idacoes) references imobi(idimobi);
 
-Select idimobi valor 
-from imobi 
-where idimobi ='4' and valor >'1,1';
+import mysql.connector
+def bancodedados(query):
+    try:
+        conexao = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            database="fundosdeinvestimento"
+        )
+        cursor = conexao.cursor()
+        cursor.execute(query)
+        resultados = cursor.fetchall()
+        return resultados
+    except mysql.connector.Error as erro:
+        print(f"Erro ao conectar ao MySQL: {erro}")
+        return None
+    finally:
+        if 'conexao' in locals() and conexao.is_connected():
+            cursor.close()
+            conexao.close()
 
-Select 
-COUNT(*) AS total_pedidos,
-SUM(numoperacao) AS totaloperacao,
-AVG(numtotaloperacao) AS mediatotal 
-from cripto;
+selecidvalor="Select idimobi valor, from imobi , where idimobi ='4' and valor >'1,1';"
+calculoscripto='Select, COUNT(*) AS total_pedidos, SUM(numoperacao) AS totaloperacao, AVG(numtotaloperacao) AS mediatotal,from cripto;'
 
-select codigo,
-AVG(valor) as mediarendimento
-from imobi
-group by codigo
-having AVG(valor)>0;
+calculosvalores=('select nome',
+'sum(negocios) as sumnegocios,'
+'sum(ultima)  as sumultima,'
+'sum(variacao) as sumvariacao,'
+'AVG(negocios) as medianegocio,'
+'AVG(ultima) as mediaultima,'
+'Avg(variacao) as mediavariacao'
+'from valores'
+'group by nome;')
 
-select nome,
-sum(negocios) as sumnegocios,
-sum(ultima)  as sumultima,
-sum(variacao) as sumvariacao,
-AVG(negocios) as medianegocio,
-AVG(ultima) as mediaultima,
-Avg(variacao) as mediavariacao
-from valores
-group by nome;
+medvalorcodigo=('select codigo,'
+'AVG(valor) as mediarendimento'
+'from imobi'
+'group by codigo'
+'having AVG(valor)>0;')
 
-select i.idimobi, a.idacoes as id_de_valor
+joinmobiacoes=('select i.idimobi, a.idacoes as id_de_valor'
+'from valores as a'
+'INNER JOIN imobi as i ON a.idacoes = i.idimobi')
+
+bancodedados(selecidvalor)
+bancodedados(calculoscripto)
+bancodedados(calculosvalores)
+bancodedados(medvalorcodigo)
+bancodedados(joinmobiacoes)
+
+
 from valores as a
 INNER JOIN imobi as i ON a.idacoes = i.idimobi
