@@ -1,15 +1,19 @@
-import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-#analise estatística IMOBI
-# dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
-# ta=dfimobi['valor']
-
 def estatistica(x):
     media=x.mean()
     mediana=x.median()
+    q1 = x.quantile(0.25)
+    q3 = x.quantile(0.75)
+    IQR = q3 - q1
+        # Limites de Outliers
+    limite_superior = q3 + (1.5 * IQR)
+    limite_inferior = q1 - (1.5 * IQR)
+        # Valores Extremos
+    min_valor = x.min()
+    max_valor = x.max()
     variancia=np.var(x, ddof=0)
     desvio_padrao=np.std(x, ddof=0)
     cv= (desvio_padrao / media) * 100
@@ -21,6 +25,7 @@ def estatistica(x):
     else:
         analise = "Alta dispersão dos dados em relação à média."
     print(f"Conclusão da Dispersão: {analise}")
+
     assimetria=x.skew()
     if assimetria >= -0.5 and assimetria <= 0.5:
         assimetria = "Simétrica (ou Quase Simétrica). Média e Mediana são próximas."
@@ -29,6 +34,7 @@ def estatistica(x):
     else:
         assimetria = "Negativa. A cauda se estende para a esquerda (valores menores). Média < Mediana."
     print(f"\nConclusão da Assimetria: {assimetria}")
+
     curtosa=x.kurtosis()
     if curtosa >= 2.5 and curtosa <= 3.5:
         curtosa = "Mesocúrtica. Distribuição próxima da normal (dados uniformes no entorno da média)."
@@ -42,6 +48,12 @@ def estatistica(x):
     print(f"--- Análise dos es Totais dos Pedidos ---")
     print(f"\nMédia dos es Totais: R$ {media:.2f}")
     print(f'Mediana:{mediana:.2f}')
+    print(f" q1: {q1}")
+    print(f" q3: {q3}")
+    print(f'limite superior:{limite_superior}')
+    print(f'limite inferior:{limite_inferior}')
+    print(f'valor mínimo:{min_valor}')
+    print(f'valor máximo:{max_valor}')
     print(f"Variância dos es Totais: {variancia:.2f}")
     print(f'Assimetria:{assimetria}')
     print(f"Desvio Padrão dos es Totais: R$ {desvio_padrao:.2f}")
@@ -49,11 +61,47 @@ def estatistica(x):
     print(f"Coeficiente de Variação (CV): {cv:.2f}%")
     print(f"Distância da Variância / Média²: {distancia:.2f}")
     
+def gerarhistograma(x):
+    med=x.mean()
+    mediana=x.median()
+    sns.histplot(x, kde=True, bins=30, color='skyblue', edgecolor='black', stat='density')
+    plt.axvline(med, color='red', linestyle='--', label=f'Média: {med:.2f}')
+    plt.axvline(mediana, color='green', linestyle=':', label=f'Mediana: {mediana:.2f}')
+    plt.title('Distribuição dos Preços dos Produtos (Histograma com KDE)', fontsize=14)
+    plt.xlabel('Preço (R$)', fontsize=12)
+    plt.ylabel('Frequência', fontsize=12)
+    plt.legend()
+    plt.show()
 
+def boxsplot(x):
+    q1 = x.quantile(0.25)
+    q3 = x.quantile(0.75)
+    mediana=x.median()
+    IQR = q3 - q1
+        # Limites de Outliers
+    limite_superior = q3 + (1.5 * IQR)
+    limite_inferior = q1 - (1.5 * IQR)
+        # Valores Extremos
+    min_valor = x.min()
+    max_valor = x.max()
+    ax = sns.boxplot(x=x, color='lightgreen', fliersize=5)
+    plt.title('Boxplot: Distribuição e Identificação de Outliers', fontsize=14)
+    plt.xlabel('Valor (R$)', fontsize=12)
+    plt.axvline(q1, color='orange', linestyle='--', label=f'q1: {q1:.2f}')
+    plt.axvline(q3, color='purple', linestyle='--', label=f'q3:{q3:.2f}')
+    plt.axvline(mediana, color='red', linestyle='-', label=f'Mediana:{mediana:.2f}')
+    plt.axvline(limite_superior, color='purple', linestyle='--', label=f'Limite Sup: R$ {limite_superior:.2f}')
+    plt.axvline(limite_inferior, color='purple', linestyle='--', label=f'Limite Inf: R$ {limite_inferior:.2f}')
+    plt.axvline(max_valor, color='black', linestyle=':', label=f'Máx Real: R$ {max_valor:.2f}')
+    plt.axvline(min_valor, color='black', linestyle=':', label=f'Mín Real: R$ {min_valor:.2f}')
+    plt.legend()
+    plt.show()
 #analise estatística IMOBI
-dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
+dfimobi=pd.read_excel('fundosdeinvestimento.xlsx', sheet_name='imobi')
 mobi=dfimobi['valor']
 estatistica(mobi)
+gerarhistograma(mobi)
+boxsplot(mobi)
 
 #Análise estatística ações
 dfes=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='valores')
@@ -61,8 +109,16 @@ nego=dfes['negocios']
 cota=dfes['ultima']
 vari=dfes['variacao']
 estatistica(nego)
+gerarhistograma(nego)
+boxsplot(nego)
+
 estatistica(cota)
+gerarhistograma(cota)
+boxsplot(cota)
+
 estatistica(vari)
+gerarhistograma(vari)
+boxsplot(vari)
 
 #Análise estatística cripto
 dfcripto=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='cripto')
@@ -70,5 +126,16 @@ operacao=dfcripto['numoperacao']
 totalope=dfcripto['numtotaloperacao']
 vmopera=dfcripto['vmporoperacao']
 estatistica(operacao)
+gerarhistograma(operacao)
+boxsplot(operacao)
+
 estatistica(totalope)
+gerarhistograma(totalope)
+boxsplot(totalope)
+
 estatistica(vmopera)
+gerarhistograma(vmopera)
+boxsplot(vmopera)
+
+
+
