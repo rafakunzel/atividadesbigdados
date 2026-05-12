@@ -1,29 +1,31 @@
 Create database fundosdeinvestimento;
 use fundosdeinvestimento;
 
-CREATE TABLE Produto (
-id_produto int primary key not null auto_increment,
-nome_produto varchar(100),
-categoria varchar(50),
-preco decimal(10,2),
-estoque int
-);
-Select * From produto;
-truncate table produto; #esvazia a tabela 
-
-CREATE TABLE clientes (
- id_cliente INT PRIMARY KEY,
- nome VARCHAR(255),
- email VARCHAR(255)
+CREATE TABLE imobi (
+idimobi int primary key ,
+codigo varchar(50000),
+tipo varchar(50000),
+valor decimal(10,7),
+registro date,
+ex date,
+pagamento date
 );
 
-CREATE TABLE pedidos (
- id_pedido INT PRIMARY KEY,
- data_pedido DATE,
- valor_total DECIMAL(10, 2),
- id_cliente INT,
- id_produto INT,
- quantidade INT
+CREATE TABLE valores (
+idacoes	INT PRIMARY KEY,
+codigo	TEXT(50000),
+nome	TEXT(50000),
+negocios decimal(10,5),
+ultima	decimal(10,5),
+variacao decimal(10,5)																			
+);
+
+CREATE TABLE cripto  (
+criptoativo	varchar(50000),
+mesano	date,
+numoperacao	decimal(10,3),
+numtotaloperacao decimal(10,3),
+vmporoperacao decimal(10,3)																				
 );
 
 alter table valores
@@ -51,7 +53,7 @@ def bancodedados(query):
             cursor.close()
             conexao.close()
 
-selecidvalor="Select idimobi valor, from imobi , where idimobi ='4' and valor >'1,1';"
+selecidvalor="Select idimobi valor, from imobi , where idimobi ='550' and valor >'1,1';"
 calculoscripto='Select, COUNT(*) AS total_pedidos, SUM(numoperacao) AS totaloperacao, AVG(numtotaloperacao) AS mediatotal,from cripto;'
 
 calculosvalores=('select nome',
