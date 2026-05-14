@@ -1,0 +1,136 @@
+import numpy as np
+import polars as pl
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+# Configuração para exibir floats completos no Polars
+pl.Config.set_fmt_float("full")
+
+arquivo_csv = "fidiario.csv"
+arquivo_parquet = "fidiario_POLARS.parquet"
+# 1. scan_csv() cria o plano de execução (LazyFrame)
+inicial_lazy = pl.scan_csv(arquivo_csv, separator=',', encoding='utf8')
+
+# 2. Executa o plano em modo streaming e salva em Parquet
+inicial_lazy.sink_parquet(arquivo_parquet)
+
+# 3. Define o ponto de entrada principal via Parquet
+inicial = pl.scan_parquet(arquivo_parquet)
+analisevltotal_df = inicial.group_by("data").agg([
+    pl.col("vltotal").min().alias("minimo"),
+    pl.col("vltotal").mean().alias("media"),
+    pl.col("vltotal").std().alias("desvio_padrao"),
+    pl.col("vltotal").max().alias("maximo"),
+    pl.col("vltotal").median().alias("mediana"),
+    pl.col('vltotal').quantile(0.25).alias('Q1'),
+    pl.col('vltotal').quantile(0.75).alias('Q3'),
+    pl.col('vltotal').skew().alias('Assimetria'),
+    pl.col('vltotal').kurtosis().alias('Curtose'),
+]).collect()
+
+display(analisevltotal_df)
+
+# Automatização do feedback de Assimetria
+assimetria = analisevltotal_df['Assimetria'][0]
+if -0.5 <= assimetria <= 0.5:
+    print('Distribuição Simétrica — dados bem balanceados')
+elif assimetria > 0.5:
+    print('Assimétrica Positiva — existem valores muito altos puxando a média')
+else:
+    print('Assimétrica Negativa — existem valores muito baixos puxando a média')
+    q1 = analisevltotal_df['Q1'][0]
+q3 = analisevltotal_df['Q3'][0]
+iqr = q3 - q1
+limiteinf = q1 - (1.5 * iqr)
+limitesup = q3 + (1.5 * iqr)
+
+print(f"\nLimites para Outliers: Inferior ({limiteinf}) | Superior ({limitesup})")
+
+outliers = inicial.filter(
+    (pl.col('vltotal') < limiteinf) | (pl.col('vltotal') > limitesup)
+).select(['tipfundoclasse', 'vltotal']).collect()
+
+display(outliers.head())
+visual = inicial.select("vltotal").collect().to_series()
+
+plt.figure(figsize=(15, 5))
+
+# Histograma Principal
+plt.subplot(1, 2, 1)
+sns.histplot(visual, bins=30, kde=True, color='green')
+plt.title('Distribuição dos Valores Totais')
+
+# Boxplot
+plt.subplot(1, 2, 2)
+sns.boxplot(x=visual, color='green')
+plt.title('Boxplot dos Valores Totais')
+plt.tight_layout()
+plt.show()
+
+# Recorte de Valores Superiores
+visual_superiores = inicial.filter(pl.col("vltotal") > 975).select("vltotal").collect().to_series()
+plt.figure(figsize=(10, 4))
+sns.histplot(visual_superiores, kde=True, color='red')
+plt.title('Recorte: Apenas Valores > 975 (LS)')
+plt.show()
+df_correlacao_prep = inicial.group_by("data").agg([
+    pl.len().alias("total_data"),
+    pl.col("vltotal").mean().alias("Valor_Medio_total")
+])
+
+analise_correlacao = df_correlacao_prep.select([
+    pl.corr("total_data", "Valor_Medio_total", method="pearson").alias("Pearson"),
+    pl.corr("total_data", "Valor_Medio_total", method="spearman").alias("Spearman")
+]).collect()
+
+r = analise_correlacao["Pearson"][0]
+print(f"\n--- Coeficientes de Correlação ---")
+print(analise_correlacao)
+
+# Gráfico de Dispersão
+df_scatter = df_correlacao_prep.collect()
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=df_scatter.to_pandas(), x="total_data", y="Valor_Medio_total", alpha=0.5)
+plt.xscale('log')
+plt.title(f'Dispersão: Qtd Registros vs Valor Médio (r={r:.2f})')
+plt.show()
+
+#Parte com erros 
+# Preparação dos dados temporais
+df_agrupado = inicial.group_by("data").agg(
+    pl.col("vltotal").mean().alias("VALOR_MEDIO")
+).sort("data").collect()
+
+# Conversão para formato Date e cálculo de dias transcorridos
+df_reg = df_agrupado.with_columns([
+    (pl.col("data").dt.day() * 30 + pl.col("data").dt.day() - 
+     (pl.col("data").min().dt.day() * 30 + pl.col("data").min().dt.day()))
+    .alias("DIAS_DESDE_INICIO")
+])
+
+
+# Visualização da Tendência
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_reg.to_pandas(), x="data", y="VALOR_MEDIO", marker='o', linewidth=2.5)
+plt.title("Evolução do Valor Médio ao Longo do Tempo")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Exemplo de Regressão Linear (Scikit-Learn)
+X = df_reg["DIAS_DESDE_INICIO"].to_numpy().reshape(-1, 1)
+y = df_reg["VALOR_MEDIO"].to_numpy()
+
+reg = LinearRegression().fit(X, y)
+inclinacao, intercepto = reg.coef_[0], reg.intercept_
+
+# Gráfico de Regressão
+plt.figure(figsize=(10, 6))
+sns.regplot(x=X.flatten(), y=y, ci=95, line_kws={'color': 'red', 'label': f'y = {inclinacao:.2f}x + {intercepto:.2f}'})
+plt.title('Regressão Linear: Tendência Temporal')
+plt.xlabel('Dias desde o início')
+plt.ylabel('Valor Médio (R$)')
+plt.legend()
+plt.show()
