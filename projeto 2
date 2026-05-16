@@ -4,20 +4,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LinearRegression
 import pandas as pd
-
 # Configuração para exibir floats completos no Polars
 pl.Config.set_fmt_float("full")
-
-arquivo_csv = "fidiario.csv"
-arquivo_parquet = "fidiario_POLARS.parquet"
+arquivo_csv = "fidiariocerto.csv"
+arquivo_parquet = "fidiariocerto_POLARS.parquet"
 # 1. scan_csv() cria o plano de execução (LazyFrame)
-inicial_lazy = pl.scan_csv(arquivo_csv, separator=',', encoding='utf8')
-
+inicial_lazy = pl.scan_csv(arquivo_csv, separator=',', encoding='utf8',ignore_errors=True)
 # 2. Executa o plano em modo streaming e salva em Parquet
 inicial_lazy.sink_parquet(arquivo_parquet)
-
 # 3. Define o ponto de entrada principal via Parquet
 inicial = pl.scan_parquet(arquivo_parquet)
+display(inicial.collect())
+
+#ANÁLISE VALOR TOTAL DOS FUNDOS VLTOTAL
 analisevltotal_df = inicial.group_by("data").agg([
     pl.col("vltotal").min().alias("minimo"),
     pl.col("vltotal").mean().alias("media"),
@@ -29,7 +28,6 @@ analisevltotal_df = inicial.group_by("data").agg([
     pl.col('vltotal').skew().alias('Assimetria'),
     pl.col('vltotal').kurtosis().alias('Curtose'),
 ]).collect()
-
 display(analisevltotal_df)
 
 # Automatização do feedback de Assimetria
@@ -40,41 +38,31 @@ elif assimetria > 0.5:
     print('Assimétrica Positiva — existem valores muito altos puxando a média')
 else:
     print('Assimétrica Negativa — existem valores muito baixos puxando a média')
-    q1 = analisevltotal_df['Q1'][0]
+#
+q1 = analisevltotal_df['Q1'][0]
 q3 = analisevltotal_df['Q3'][0]
 iqr = q3 - q1
 limiteinf = q1 - (1.5 * iqr)
 limitesup = q3 + (1.5 * iqr)
-
 print(f"\nLimites para Outliers: Inferior ({limiteinf}) | Superior ({limitesup})")
-
 outliers = inicial.filter(
     (pl.col('vltotal') < limiteinf) | (pl.col('vltotal') > limitesup)
 ).select(['tipfundoclasse', 'vltotal']).collect()
-
 display(outliers.head())
+#iNICIALIZAÇÃO Gráficos
 visual = inicial.select("vltotal").collect().to_series()
-
 plt.figure(figsize=(15, 5))
-
 # Histograma Principal
 plt.subplot(1, 2, 1)
 sns.histplot(visual, bins=30, kde=True, color='green')
 plt.title('Distribuição dos Valores Totais')
-
 # Boxplot
 plt.subplot(1, 2, 2)
 sns.boxplot(x=visual, color='green')
 plt.title('Boxplot dos Valores Totais')
 plt.tight_layout()
 plt.show()
-
-# Recorte de Valores Superiores
-visual_superiores = inicial.filter(pl.col("vltotal") > 975).select("vltotal").collect().to_series()
-plt.figure(figsize=(10, 4))
-sns.histplot(visual_superiores, kde=True, color='red')
-plt.title('Recorte: Apenas Valores > 975 (LS)')
-plt.show()
+#
 df_correlacao_prep = inicial.group_by("data").agg([
     pl.len().alias("total_data"),
     pl.col("vltotal").mean().alias("Valor_Medio_total")
@@ -84,11 +72,9 @@ analise_correlacao = df_correlacao_prep.select([
     pl.corr("total_data", "Valor_Medio_total", method="pearson").alias("Pearson"),
     pl.corr("total_data", "Valor_Medio_total", method="spearman").alias("Spearman")
 ]).collect()
-
 r = analise_correlacao["Pearson"][0]
 print(f"\n--- Coeficientes de Correlação ---")
 print(analise_correlacao)
-
 # Gráfico de Dispersão
 df_scatter = df_correlacao_prep.collect()
 plt.figure(figsize=(10, 6))
@@ -96,21 +82,19 @@ sns.scatterplot(data=df_scatter.to_pandas(), x="total_data", y="Valor_Medio_tota
 plt.xscale('log')
 plt.title(f'Dispersão: Qtd Registros vs Valor Médio (r={r:.2f})')
 plt.show()
-
-#Parte com erros 
 # Preparação dos dados temporais
-df_agrupado = inicial.group_by("data").agg(
-    pl.col("vltotal").mean().alias("VALOR_MEDIO")
-).sort("data").collect()
-
+df_agrupado = ( inicial.group_by("data")
+    .agg(pl.col("vltotal").mean().alias("VALOR_MEDIO"))
+    .with_columns(pl.col("data").str.to_date("%Y-%m-%d"))  # <--- CORREÇÃO AQUI
+    .sort("data")
+    .collect()
+)
 # Conversão para formato Date e cálculo de dias transcorridos
-df_reg = df_agrupado.with_columns([
-    (pl.col("data").dt.day() * 30 + pl.col("data").dt.day() - 
-     (pl.col("data").min().dt.day() * 30 + pl.col("data").min().dt.day()))
+df_reg = df_agrupado.with_columns(
+    (pl.col("data") - pl.col("data").min())
+    .dt.total_days()
     .alias("DIAS_DESDE_INICIO")
-])
-
-
+)
 # Visualização da Tendência
 plt.figure(figsize=(12, 6))
 sns.lineplot(data=df_reg.to_pandas(), x="data", y="VALOR_MEDIO", marker='o', linewidth=2.5)
@@ -118,11 +102,9 @@ plt.title("Evolução do Valor Médio ao Longo do Tempo")
 plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
-
 # Exemplo de Regressão Linear (Scikit-Learn)
 X = df_reg["DIAS_DESDE_INICIO"].to_numpy().reshape(-1, 1)
 y = df_reg["VALOR_MEDIO"].to_numpy()
-
 reg = LinearRegression().fit(X, y)
 inclinacao, intercepto = reg.coef_[0], reg.intercept_
 
@@ -134,3 +116,431 @@ plt.xlabel('Dias desde o início')
 plt.ylabel('Valor Médio (R$)')
 plt.legend()
 plt.show()
+
+#ANÁLISE PATRIMONIO LÍQUIDO VALOR REAL DO FUNDO DEPOIS DE PAGAR AS DESPESAS E TAXAS 
+analisepatriliquido_df = inicial.group_by("data").agg([
+    pl.col("patriliquido").min().alias("minimo"),
+    pl.col("patriliquido").mean().alias("media"),
+    pl.col("patriliquido").std().alias("desvio_padrao"),
+    pl.col("patriliquido").max().alias("maximo"),
+    pl.col("patriliquido").median().alias("mediana"),
+    pl.col('patriliquido').quantile(0.25).alias('Q1'),
+    pl.col('patriliquido').quantile(0.75).alias('Q3'),
+    pl.col('patriliquido').skew().alias('Assimetria'),
+    pl.col('patriliquido').kurtosis().alias('Curtose'),
+]).collect()
+
+display(analisepatriliquido_df)
+
+# Automatização do feedback de Assimetria
+assimetria = analisepatriliquido_df['Assimetria'][0]
+if -0.5 <= assimetria <= 0.5:
+    print('Distribuição Simétrica — dados bem balanceados')
+elif assimetria > 0.5:
+    print('Assimétrica Positiva — existem valores muito altos puxando a média')
+else:
+    print('Assimétrica Negativa — existem valores muito baixos puxando a média')
+q1 = analisepatriliquido_df['Q1'][0]
+q3 = analisepatriliquido_df['Q3'][0]
+iqr = q3 - q1
+limiteinf = q1 - (1.5 * iqr)
+limitesup = q3 + (1.5 * iqr)
+print(f"\nLimites para Outliers: Inferior ({limiteinf}) | Superior ({limitesup})")
+outliers = inicial.filter(
+    (pl.col('patriliquido') < limiteinf) | (pl.col('patriliquido') > limitesup)
+).select(['tipfundoclasse', 'patriliquido']).collect()
+display(outliers.head())
+
+visual = inicial.select("patriliquido").collect().to_series()
+plt.figure(figsize=(15, 5))
+# Histograma Principal
+plt.subplot(1, 2, 1)
+sns.histplot(visual, bins=30, kde=True, color='green')
+plt.title('Distribuição dos Valores Totais')
+# Boxplot
+plt.subplot(1, 2, 2)
+sns.boxplot(x=visual, color='green')
+plt.title('Boxplot dos Valores Totais')
+plt.tight_layout()
+plt.show()
+# Recorte de Valores Superiores
+visual_superiores = inicial.filter(pl.col("patriliquido") > 975).select("patriliquido").collect().to_series()
+plt.figure(figsize=(10, 4))
+sns.histplot(visual_superiores, kde=True, color='red')
+plt.title('Recorte: Apenas Valores > 975 (LS)')
+plt.show()
+
+df_correlacao_prep = inicial.group_by("data").agg([
+    pl.len().alias("total_data"),
+    pl.col("patriliquido").mean().alias("Valor_Medio_total")
+])
+
+analise_correlacao = df_correlacao_prep.select([
+    pl.corr("total_data", "Valor_Medio_total", method="pearson").alias("Pearson"),
+    pl.corr("total_data", "Valor_Medio_total", method="spearman").alias("Spearman")
+]).collect()
+r = analise_correlacao["Pearson"][0]
+print(f"\n--- Coeficientes de Correlação ---")
+print(analise_correlacao)
+# Gráfico de Dispersão
+df_scatter = df_correlacao_prep.collect()
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=df_scatter.to_pandas(), x="total_data", y="Valor_Medio_total", alpha=0.5)
+plt.xscale('log')
+plt.title(f'Dispersão: Qtd Registros vs Valor Médio (r={r:.2f})')
+plt.show()
+
+# Preparação dos dados temporais
+df_agrupado = ( inicial.group_by("data")
+    .agg(pl.col("patriliquido").mean().alias("VALOR_MEDIO"))
+    .with_columns(pl.col("data").str.to_date("%Y-%m-%d"))  # <--- CORREÇÃO AQUI
+    .sort("data")
+    .collect()
+)
+# Conversão para formato Date e cálculo de dias transcorridos
+df_reg = df_agrupado.with_columns(
+    (pl.col("data") - pl.col("data").min())
+    .dt.total_days()
+    .alias("DIAS_DESDE_INICIO")
+)
+# Visualização da Tendência
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_reg.to_pandas(), x="data", y="VALOR_MEDIO", marker='o', linewidth=2.5)
+plt.title("Evolução do Valor Médio ao Longo do Tempo")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+# Exemplo de Regressão Linear (Scikit-Learn)
+X = df_reg["DIAS_DESDE_INICIO"].to_numpy().reshape(-1, 1)
+y = df_reg["VALOR_MEDIO"].to_numpy()
+reg = LinearRegression().fit(X, y)
+inclinacao, intercepto = reg.coef_[0], reg.intercept_
+
+# Gráfico de Regressão
+plt.figure(figsize=(10, 6))
+sns.regplot(x=X.flatten(), y=y, ci=95, line_kws={'color': 'red', 'label': f'y = {inclinacao:.2f}x + {intercepto:.2f}'})
+plt.title('Regressão Linear: Tendência Temporal')
+plt.xlabel('Dias desde o início')
+plt.ylabel('Valor Médio (R$)')
+plt.legend()
+plt.show()
+
+#ANÁLISE VALOR COTA 
+analisevlcota_df = inicial.group_by("data").agg([
+    pl.col("vlcota").min().alias("minimo"),
+    pl.col("vlcota").mean().alias("media"),
+    pl.col("vlcota").std().alias("desvio_padrao"),
+    pl.col("vlcota").max().alias("maximo"),
+    pl.col("vlcota").median().alias("mediana"),
+    pl.col('vlcota').quantile(0.25).alias('Q1'),
+    pl.col('vlcota').quantile(0.75).alias('Q3'),
+    pl.col('vlcota').skew().alias('Assimetria'),
+    pl.col('vlcota').kurtosis().alias('Curtose'),
+]).collect()
+
+display(analisevlcota_df)
+
+# Automatização do feedback de Assimetria
+assimetria = analisevlcota_df['Assimetria'][0]
+if -0.5 <= assimetria <= 0.5:
+    print('Distribuição Simétrica — dados bem balanceados')
+elif assimetria > 0.5:
+    print('Assimétrica Positiva — existem valores muito altos puxando a média')
+else:
+    print('Assimétrica Negativa — existem valores muito baixos puxando a média')
+q1 = analisevlcota_df['Q1'][0]
+q3 = analisevlcota_df['Q3'][0]
+iqr = q3 - q1
+limiteinf = q1 - (1.5 * iqr)
+limitesup = q3 + (1.5 * iqr)
+print(f"\nLimites para Outliers: Inferior ({limiteinf}) | Superior ({limitesup})")
+outliers = inicial.filter(
+    (pl.col('vlcota') < limiteinf) | (pl.col('vlcota') > limitesup)
+).select(['tipfundoclasse', 'vlcota']).collect()
+display(outliers.head())
+
+visual = inicial.select("vlcota").collect().to_series()
+plt.figure(figsize=(15, 5))
+# Histograma Principal
+plt.subplot(1, 2, 1)
+sns.histplot(visual, bins=30, kde=True, color='green')
+plt.title('Distribuição dos Valores Totais')
+# Boxplot
+plt.subplot(1, 2, 2)
+sns.boxplot(x=visual, color='green')
+plt.title('Boxplot dos Valores Totais')
+plt.tight_layout()
+plt.show()
+# Recorte de Valores Superiores
+visual_superiores = inicial.filter(pl.col("vlcota") > 975).select("vlcota").collect().to_series()
+plt.figure(figsize=(10, 4))
+sns.histplot(visual_superiores, kde=True, color='red')
+plt.title('Recorte: Apenas Valores > 975 (LS)')
+plt.show()
+
+df_correlacao_prep = inicial.group_by("data").agg([
+    pl.len().alias("total_data"),
+    pl.col("vlcota").mean().alias("Valor_Medio_total")
+])
+
+analise_correlacao = df_correlacao_prep.select([
+    pl.corr("total_data", "Valor_Medio_total", method="pearson").alias("Pearson"),
+    pl.corr("total_data", "Valor_Medio_total", method="spearman").alias("Spearman")
+]).collect()
+r = analise_correlacao["Pearson"][0]
+print(f"\n--- Coeficientes de Correlação ---")
+print(analise_correlacao)
+# Gráfico de Dispersão
+df_scatter = df_correlacao_prep.collect()
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=df_scatter.to_pandas(), x="total_data", y="Valor_Medio_total", alpha=0.5)
+plt.xscale('log')
+plt.title(f'Dispersão: Qtd Registros vs Valor Médio (r={r:.2f})')
+plt.show()
+
+# Preparação dos dados temporais
+df_agrupado = ( inicial.group_by("data")
+    .agg(pl.col("vlcota").mean().alias("VALOR_MEDIO"))
+    .with_columns(pl.col("data").str.to_date("%Y-%m-%d"))  # <--- CORREÇÃO AQUI
+    .sort("data")
+    .collect()
+)
+# Conversão para formato Date e cálculo de dias transcorridos
+df_reg = df_agrupado.with_columns(
+    (pl.col("data") - pl.col("data").min())
+    .dt.total_days()
+    .alias("DIAS_DESDE_INICIO")
+)
+# Visualização da Tendência
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_reg.to_pandas(), x="data", y="VALOR_MEDIO", marker='o', linewidth=2.5)
+plt.title("Evolução do Valor Médio ao Longo do Tempo")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+#Análise número de cotista
+analisenumcotista_df = inicial.group_by("data").agg([
+    pl.col("numcotista").min().alias("minimo"),
+    pl.col("numcotista").mean().alias("media"),
+    pl.col("numcotista").std().alias("desvio_padrao"),
+    pl.col("numcotista").max().alias("maximo"),
+    pl.col("numcotista").median().alias("mediana"),
+    pl.col('numcotista').quantile(0.25).alias('Q1'),
+    pl.col('numcotista').quantile(0.75).alias('Q3'),
+    pl.col('numcotista').skew().alias('Assimetria'),
+    pl.col('numcotista').kurtosis().alias('Curtose'),
+]).collect()
+
+display(analisenumcotista_df)
+
+# Automatização do feedback de Assimetria
+assimetria = analisenumcotista_df['Assimetria'][0]
+if -0.5 <= assimetria <= 0.5:
+    print('Distribuição Simétrica — dados bem balanceados')
+elif assimetria > 0.5:
+    print('Assimétrica Positiva — existem valores muito altos puxando a média')
+else:
+    print('Assimétrica Negativa — existem valores muito baixos puxando a média')
+q1 = analisenumcotista_df['Q1'][0]
+q3 = analisenumcotista_df['Q3'][0]
+iqr = q3 - q1
+limiteinf = q1 - (1.5 * iqr)
+limitesup = q3 + (1.5 * iqr)
+print(f"\nLimites para Outliers: Inferior ({limiteinf}) | Superior ({limitesup})")
+outliers = inicial.filter(
+    (pl.col('numcotista') < limiteinf) | (pl.col('numcotista') > limitesup)
+).select(['tipfundoclasse', 'numcotista']).collect()
+display(outliers.head())
+
+visual = inicial.select("numcotista").collect().to_series()
+plt.figure(figsize=(15, 5))
+# Histograma Principal
+plt.subplot(1, 2, 1)
+sns.histplot(visual, bins=30, kde=True, color='green')
+plt.title('Distribuição dos Valores Totais')
+# Boxplot
+plt.subplot(1, 2, 2)
+sns.boxplot(x=visual, color='green')
+plt.title('Boxplot dos Valores Totais')
+plt.tight_layout()
+plt.show()
+# Recorte de Valores Superiores
+visual_superiores = inicial.filter(pl.col("numcotista") > 975).select("numcotista").collect().to_series()
+plt.figure(figsize=(10, 4))
+sns.histplot(visual_superiores, kde=True, color='red')
+plt.title('Recorte: Apenas Valores > 975 (LS)')
+plt.show()
+
+df_correlacao_prep = inicial.group_by("data").agg([
+    pl.len().alias("total_data"),
+    pl.col("numcotista").mean().alias("Valor_Medio_total")
+])
+
+analise_correlacao = df_correlacao_prep.select([
+    pl.corr("total_data", "Valor_Medio_total", method="pearson").alias("Pearson"),
+    pl.corr("total_data", "Valor_Medio_total", method="spearman").alias("Spearman")
+]).collect()
+r = analise_correlacao["Pearson"][0]
+print(f"\n--- Coeficientes de Correlação ---")
+print(analise_correlacao)
+# Gráfico de Dispersão
+df_scatter = df_correlacao_prep.collect()
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=df_scatter.to_pandas(), x="total_data", y="Valor_Medio_total", alpha=0.5)
+plt.xscale('log')
+plt.title(f'Dispersão: Qtd Registros vs Valor Médio (r={r:.2f})')
+plt.show()
+
+# Preparação dos dados temporais
+df_agrupado = ( inicial.group_by("data")
+    .agg(pl.col("numcotista").mean().alias("VALOR_MEDIO"))
+    .with_columns(pl.col("data").str.to_date("%Y-%m-%d"))  # <--- CORREÇÃO AQUI
+    .sort("data")
+    .collect()
+)
+# Conversão para formato Date e cálculo de dias transcorridos
+df_reg = df_agrupado.with_columns(
+    (pl.col("data") - pl.col("data").min())
+    .dt.total_days()
+    .alias("DIAS_DESDE_INICIO")
+)
+# Visualização da Tendência
+plt.figure(figsize=(12, 6))
+sns.lineplot(data=df_reg.to_pandas(), x="data", y="VALOR_MEDIO", marker='o', linewidth=2.5)
+plt.title("Evolução do Valor Médio ao Longo do Tempo")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+# Exemplo de Regressão Linear (Scikit-Learn)
+
+X = df_reg["DIAS_DESDE_INICIO"].to_numpy().reshape(-1, 1)
+y = df_reg["VALOR_MEDIO"].to_numpy()
+## 2. Criar e treinar o modelo
+modelo = LinearRegression()
+modelo.fit(X, y)
+# Coeficientes do modelo
+inclinacao = modelo.coef_[0]
+intercepto = modelo.intercept_
+print(f"Equação da reta: VALOR_MEDIO = {inclinacao:.2f} * DIAS_DESDE_INICIO + {intercepto:.2f}")
+print(f"Coeficiente angular (R$/mês): {inclinacao:.2f}")
+print(f"Intercepto (valor inicial): R$ {intercepto:.2f}")
+## 3. Fazer previsões
+y_pred = modelo.predict(X)
+## 4. Avaliar o modelo
+from sklearn.metrics import r2_score, mean_squared_error
+r2 = r2_score(y, y_pred)
+mse = mean_squared_error(y, y_pred)
+print(f"\nMétricas de avaliação:")
+print(f"Coeficiente de Determinação (R²): {r2:.4f}")
+print(f"Erro Quadrático Médio (MSE): {mse:.2f}")
+## 5. Visualização dos resultados
+plt.figure(figsize=(10, 6))
+# Plotar dados reais
+plt.scatter(X, y, color='blue', label='Dados Reais')
+# Plotar linha de regressão
+plt.plot(X, y_pred, color='red', linewidth=2, label=f'Regressão: y = {inclinacao:.2f}x + {intercepto:.2f}')
+# Configurações do gráfico
+plt.title('Regressão Linear: Valor Médio vs Tempo (Meses)')
+plt.xlabel('Meses desde o início')
+plt.ylabel('Valor Médio (R$)')
+plt.grid(True)
+plt.legend()
+# Mostrar gráfico
+plt.tight_layout()
+plt.show()
+reg = LinearRegression().fit(X, y)
+inclinacao, intercepto = reg.coef_[0], reg.intercept_
+reg = LinearRegression().fit(X, y)
+inclinacao, intercepto = reg.coef_[0], reg.intercept_
+
+# Gráfico de Regressão
+plt.figure(figsize=(10, 6))
+sns.regplot(x=X.flatten(), y=y, ci=95, line_kws={'color': 'red', 'label': f'y = {inclinacao:.2f}x + {intercepto:.2f}'})
+plt.title('Regressão Linear: Tendência Temporal')
+plt.xlabel('Dias desde o início')
+plt.ylabel('Valor Médio (R$)')
+plt.legend()
+plt.show()
+
+# 1. Selecionando colunas específicas agrupadas por data (gerando listas de valores por dia)
+df_colunas = (
+    inicial.group_by("data")
+    .agg([
+        pl.col("vltotal"),
+        pl.col("vlcota"),
+        pl.col("patriliquido"),
+        pl.col("numcotista")
+    ])
+    .collect()
+)
+df_colunas.write_csv("colunas.csv")
+print(df_colunas.head())
+
+# 2. Estatísticas Globais de vltotal (Sem group_by para não isolar os valores)
+df_vltotal = inicial.select([
+    pl.col("vltotal").min().alias("minimo"),
+    pl.col("vltotal").mean().alias("media"),
+    pl.col("vltotal").std().alias("desvio_padrao"),
+    pl.col("vltotal").max().alias("maximo"),
+    pl.col("vltotal").median().alias("mediana"),
+    pl.col('vltotal').quantile(0.25).alias('Q1'),
+    pl.col('vltotal').quantile(0.75).alias('Q3'),
+    pl.col('vltotal').skew().alias('Assimetria'),
+    pl.col('vltotal').kurtosis().alias('Curtose'),
+]).collect()
+df_vltotal.write_csv("estavltotal.csv")
+print(df_vltotal.head())
+
+# 3. Estatísticas Globais de patriliquido
+df_patriliquido = inicial.select([
+    pl.col("patriliquido").min().alias("minimo"),
+    pl.col("patriliquido").mean().alias("media"),
+    pl.col("patriliquido").std().alias("desvio_padrao"),
+    pl.col("patriliquido").max().alias("maximo"),
+    pl.col("patriliquido").median().alias("mediana"),
+    pl.col('patriliquido').quantile(0.25).alias('Q1'),
+    pl.col('patriliquido').quantile(0.75).alias('Q3'),
+    pl.col('patriliquido').skew().alias('Assimetria'),
+    pl.col('patriliquido').kurtosis().alias('Curtose'),
+]).collect()
+df_patriliquido.write_csv("estapatriliquido.csv")
+print(df_patriliquido.head())
+
+
+# 4. Estatísticas Globais de vlcota
+df_vlcota = inicial.select([
+    pl.col("vlcota").min().alias("minimo"),
+    pl.col("vlcota").mean().alias("media"),
+    pl.col("vlcota").std().alias("desvio_padrao"),
+    pl.col("vlcota").max().alias("maximo"),
+    pl.col("vlcota").median().alias("mediana"),
+    pl.col('vlcota').quantile(0.25).alias('Q1'),
+    pl.col('vlcota').quantile(0.75).alias('Q3'),
+    pl.col('vlcota').skew().alias('Assimetria'),
+    pl.col('vlcota').kurtosis().alias('Curtose'),
+]).collect()
+df_vlcota.write_csv("estavlcota.csv")
+print(df_vlcota.head())
+
+
+# 5. Estatísticas de numcotista AGRUPADAS POR DATA 
+# (Aqui faz sentido o group_by se você quiser ver a evolução da estatística dia a dia)
+df_numcotista = (
+    inicial.group_by("data")
+    .agg([
+        pl.col("numcotista").min().alias("minimo"),
+        pl.col("numcotista").mean().alias("media"),
+        pl.col("numcotista").std().alias("desvio_padrao"),
+        pl.col("numcotista").max().alias("maximo"),
+        pl.col("numcotista").median().alias("mediana"),
+        pl.col('numcotista').quantile(0.25).alias('Q1'),
+        pl.col('numcotista').quantile(0.75).alias('Q3'),
+        pl.col('numcotista').skew().alias('Assimetria'),
+        pl.col('numcotista').kurtosis().alias('Curtose'),
+    ])
+    .collect()
+)
+df_numcotista.write_csv("estanumcotista.csv")
+print(df_numcotista.head())
