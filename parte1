@@ -251,6 +251,19 @@ boxsplot(totalope)
 
 estatistica(vmopera)
 gerarhistograma(vmopera)
+
+#transforma arquivo em CSV
+dfpatriliquido.to_csv('PATRILIQUIDO',sep=',',encoding='UTF-8')
+
+# fundos de investimento em CSV
+dfimobi=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='imobi')
+dfimobi.to_csv('imobi.csv',sep=',',encoding='UTF-8')
+
+dfvalores=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='valores')
+dfvalores.to_csv('valores.csv',sep=',',encoding='UTF-8')
+
+dfcripto=pd.read_excel('fundosdeinvestimento.xlsx.',sheet_name='cripto')
+dfcripto.to_csv('cripto.csv',sep=',',encoding='UTF-8')
 boxsplot(vmopera)
 
 
